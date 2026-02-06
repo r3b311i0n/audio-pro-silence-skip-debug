@@ -28,14 +28,21 @@ export default function App() {
   const { state, position, duration } = useAudioPro();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [silenceSkip, setSilenceSkip] = useState(true);
 
   useEffect(() => {
-    AudioPro.configure({ contentType: AudioProContentType.SPEECH });
+    AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: true });
 
     resolveRedirects(REDIRECT_URL)
       .then(setResolvedUrl)
       .catch((err) => setResolveError(String(err)));
   }, []);
+
+  const toggleSilenceSkip = () => {
+    const next = !silenceSkip;
+    setSilenceSkip(next);
+    AudioPro.configure({ silenceSkip: next });
+  };
 
   const handlePlayPause = () => {
     if (state === AudioProState.IDLE || state === AudioProState.STOPPED) {
@@ -71,6 +78,15 @@ export default function App() {
         <Text style={styles.time}>
           {formatTime(position)} / {formatTime(duration)}
         </Text>
+
+        <Pressable
+          style={[styles.toggle, silenceSkip && styles.toggleActive]}
+          onPress={toggleSilenceSkip}
+        >
+          <Text style={styles.buttonText}>
+            Silence Skip: {silenceSkip ? 'ON' : 'OFF'}
+          </Text>
+        </Pressable>
 
         <View style={styles.controls}>
           <Pressable style={styles.button} onPress={() => AudioPro.seekBack()}>
@@ -135,5 +151,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '500',
+  },
+  toggle: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#8E8E93',
+    borderRadius: 8,
+  },
+  toggleActive: {
+    backgroundColor: '#34C759',
   },
 });
