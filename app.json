@@ -47,7 +47,8 @@
             "targetSdkVersion": 36
           }
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "extra": {
       "eas": {

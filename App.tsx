@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   AudioPro,
   useAudioPro,
@@ -8,14 +8,7 @@ import {
   AudioProContentType,
 } from 'react-native-audio-pro';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-
-const REDIRECT_URL =
-  'https://pdrl.fm/a95070/podtrac.com/pts/redirect.mp3/tracking.swap.fm/track/SxlTEPDY7xDg35RXkASs/traffic.omny.fm/d/clips/e73c998e-6e60-432f-8610-ae210140c5b1/afbd76b8-eff2-442a-b938-b28e0126edad/3c0eb72f-0017-489f-a549-b3b7002020a9/audio.mp3?utm_source=Podcast&in_playlist=d08826cd-f888-4cd3-b700-b28e0126edbb';
-
-async function resolveRedirects(url: string): Promise<string> {
-  const response = await fetch(url, { method: 'HEAD' });
-  return response.url;
-}
+import { Asset } from 'expo-asset';
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -24,41 +17,54 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+const DEBORAH = Asset.fromModule(require('./assets/66_Deborah.mp3'));
+
+AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: true });
+
 export default function App() {
-  const { state, position, duration } = useAudioPro();
-  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
-  const [resolveError, setResolveError] = useState<string | null>(null);
-  const [silenceSkip, setSilenceSkip] = useState(true);
+  const state = useAudioPro(s => s.playerState);
+  const position = useAudioPro(s => s.position);
+  const duration = useAudioPro(s => s.duration);
+  const silenceSkip = useAudioPro(s => s.configureOptions.silenceSkip);
+
+  const [localUri, setLocalUri] = useState<string | null>(DEBORAH.localUri);
 
   useEffect(() => {
-    AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: true });
+    if (localUri) return;
+    DEBORAH
+      .downloadAsync()
+      .then((asset) => setLocalUri(asset.localUri!));
+  }, [localUri]);
 
-    resolveRedirects(REDIRECT_URL)
-      .then(setResolvedUrl)
-      .catch((err) => setResolveError(String(err)));
-  }, []);
+  const track = useMemo(() => {
+    if (!localUri) return null;
+    return {
+      id: 'debug-podcast',
+      url: localUri,
+      title: 'Debug Podcast',
+      artwork: 'https://e1.nmcdn.io/pushkin/wp-content/uploads/2025/03/Heavyweight-Pushkin-1080.png/v:1-dynamic:1-aspect:1-fit:cover/Heavyweight-Pushkin-1080--600.webp',
+    };
+  }, [localUri]);
 
   const toggleSilenceSkip = () => {
+    if (!track) return;
     const next = !silenceSkip;
-    setSilenceSkip(next);
-    AudioPro.configure({ silenceSkip: next });
+    AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: next });
+    AudioPro.play(track);
   };
 
   const handlePlayPause = () => {
+    if (!track) return;
     if (state === AudioProState.IDLE || state === AudioProState.STOPPED) {
-      if (!resolvedUrl) return;
-      AudioPro.play({
-        id: 'debug-podcast',
-        url: resolvedUrl,
-        title: 'Debug Podcast',
-        artwork: 'https://e1.nmcdn.io/pushkin/wp-content/uploads/2025/03/Heavyweight-Pushkin-1080.png/v:1-dynamic:1-aspect:1-fit:cover/Heavyweight-Pushkin-1080--600.webp',
-      });
+      AudioPro.play(track);
     } else if (state === AudioProState.PLAYING) {
       AudioPro.pause();
     } else if (state === AudioProState.PAUSED) {
       AudioPro.resume();
     }
   };
+
+  const isLoading = state === AudioProState.LOADING;
 
   const playPauseLabel =
     state === AudioProState.PLAYING ? 'Pause' : 'Play';
@@ -68,20 +74,17 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         <Text style={styles.title}>Debug Podcast</Text>
 
-        {resolveError && (
-          <Text style={styles.error}>URL resolve failed: {resolveError}</Text>
-        )}
-        {!resolvedUrl && !resolveError && (
-          <Text style={styles.state}>Resolving URL...</Text>
-        )}
         <Text style={styles.state}>{state}</Text>
         <Text style={styles.time}>
           {formatTime(position)} / {formatTime(duration)}
         </Text>
 
+        {isLoading && <ActivityIndicator size="large" color="#007AFF" />}
+
         <Pressable
-          style={[styles.toggle, silenceSkip && styles.toggleActive]}
+          style={[styles.toggle, silenceSkip && styles.toggleActive, isLoading && styles.buttonDisabled]}
           onPress={toggleSilenceSkip}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>
             Silence Skip: {silenceSkip ? 'ON' : 'OFF'}
@@ -89,19 +92,19 @@ export default function App() {
         </Pressable>
 
         <View style={styles.controls}>
-          <Pressable style={styles.button} onPress={() => AudioPro.seekBack()}>
+          <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekBack()} disabled={isLoading}>
             <Text style={styles.buttonText}>-30s</Text>
           </Pressable>
 
-          <Pressable style={styles.button} onPress={handlePlayPause}>
+          <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={handlePlayPause} disabled={isLoading}>
             <Text style={styles.buttonText}>{playPauseLabel}</Text>
           </Pressable>
 
-          <Pressable style={styles.button} onPress={() => AudioPro.stop()}>
+          <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.stop()} disabled={isLoading}>
             <Text style={styles.buttonText}>Stop</Text>
           </Pressable>
 
-          <Pressable style={styles.button} onPress={() => AudioPro.seekForward()}>
+          <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekForward()} disabled={isLoading}>
             <Text style={styles.buttonText}>+30s</Text>
           </Pressable>
         </View>
@@ -127,10 +130,6 @@ const styles = StyleSheet.create({
   state: {
     fontSize: 16,
     color: '#666',
-  },
-  error: {
-    fontSize: 14,
-    color: '#FF3B30',
   },
   time: {
     fontSize: 18,
@@ -160,5 +159,8 @@ const styles = StyleSheet.create({
   },
   toggleActive: {
     backgroundColor: '#34C759',
+  },
+  buttonDisabled: {
+    opacity: 0.4,
   },
 });
