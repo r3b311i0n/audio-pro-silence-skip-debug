@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
@@ -25,12 +25,12 @@ function formatTime(ms: number): string {
 }
 
 const STATE_COLORS: Record<string, string> = {
-  [AudioProState.PLAYING]: '#34C759',
-  [AudioProState.LOADING]: '#FF9500',
-  [AudioProState.PAUSED]: '#FF9500',
-  [AudioProState.ERROR]: '#FF3B30',
-  [AudioProState.IDLE]: '#8E8E93',
-  [AudioProState.STOPPED]: '#8E8E93',
+  [AudioProState.PLAYING]: '#30D158',
+  [AudioProState.LOADING]: '#FF9F0A',
+  [AudioProState.PAUSED]: '#FF9F0A',
+  [AudioProState.ERROR]: '#FF453A',
+  [AudioProState.IDLE]: '#98989F',
+  [AudioProState.STOPPED]: '#98989F',
 };
 
 const DEBORAH = Asset.fromModule(require('./assets/66_Deborah.mp3'));
@@ -44,10 +44,12 @@ export default function App() {
   const silenceSkip = useAudioPro(s => s.configureOptions.silenceSkip);
   const isSkippingSilence = useAudioPro(s => s.isSkippingSilence);
   const playbackSpeed = useAudioPro(s => s.playbackSpeed);
+  const silenceSkipSpeed = useAudioPro(s => s.silenceSkipSpeed);
   const volume = useAudioPro(s => s.volume);
   const error = useAudioPro(s => s.error);
 
   const [localUri, setLocalUri] = useState<string | null>(DEBORAH.localUri);
+  const [barWidth, setBarWidth] = useState(0);
 
   const skippingOpacity = useRef(new Animated.Value(0)).current;
   const loadingOpacity = useRef(new Animated.Value(0)).current;
@@ -105,11 +107,20 @@ export default function App() {
     }
   };
 
+  const handleProgressPress = useCallback(
+    (e: { nativeEvent: { locationX: number } }) => {
+      if (duration <= 0 || barWidth <= 0) return;
+      const seekMs = Math.floor((e.nativeEvent.locationX / barWidth) * duration);
+      AudioPro.seekTo(seekMs);
+    },
+    [duration, barWidth],
+  );
+
   const playPauseLabel =
     state === AudioProState.PLAYING ? 'Pause' : 'Play';
 
   const progressPercent = duration > 0 ? (position / duration) * 100 : 0;
-  const stateColor = STATE_COLORS[state] ?? '#8E8E93';
+  const stateColor = STATE_COLORS[state] ?? '#98989F';
 
   return (
     <SafeAreaProvider>
@@ -120,7 +131,7 @@ export default function App() {
           <View style={styles.stateRow}>
             <Text style={[styles.state, { color: stateColor }]}>{state}</Text>
             <Animated.View style={{ opacity: loadingOpacity }}>
-              <ActivityIndicator size="small" color="#FF9500" />
+              <ActivityIndicator size="small" color="#FF9F0A" />
             </Animated.View>
           </View>
         </View>
@@ -130,25 +141,34 @@ export default function App() {
           <Text style={styles.time}>
             {formatTime(position)} / {formatTime(duration)}
           </Text>
-          <View style={styles.progressTrack}>
+          <Text style={styles.timeMs}>
+            {position} ms / {duration} ms
+          </Text>
+          <Pressable
+            style={styles.progressTrack}
+            onPress={handleProgressPress}
+            onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+          >
             <View
               style={[
                 styles.progressFill,
                 {
                   width: `${progressPercent}%`,
-                  backgroundColor: isSkippingSilence ? '#FF9500' : '#007AFF',
+                  backgroundColor: isSkippingSilence ? '#FF9F0A' : '#0A84FF',
                 },
               ]}
             />
-          </View>
+          </Pressable>
           <Animated.Text style={[styles.skipping, { opacity: skippingOpacity }]}>
-            Skipping Silence
+            Skipping Silence ({silenceSkipSpeed.toFixed(1)}x)
           </Animated.Text>
         </View>
 
         {/* Debug */}
         <View style={styles.debugRow}>
           <Text style={styles.debugText}>Speed: {playbackSpeed.toFixed(1)}x</Text>
+          <Text style={styles.debugDivider}>|</Text>
+          <Text style={styles.debugText}>Skip Speed: {silenceSkipSpeed.toFixed(1)}x</Text>
           <Text style={styles.debugDivider}>|</Text>
           <Text style={styles.debugText}>Vol: {Math.round(volume * 100)}%</Text>
         </View>
@@ -191,7 +211,7 @@ export default function App() {
           </Text>
         )}
 
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -200,7 +220,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#1C1C1E',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 20,
@@ -214,6 +234,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '600',
+    color: '#FFFFFF',
   },
   stateRow: {
     flexDirection: 'row',
@@ -227,11 +248,17 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 18,
     fontVariant: ['tabular-nums'],
+    color: '#FFFFFF',
+  },
+  timeMs: {
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+    color: '#98989F',
   },
   progressTrack: {
     width: '100%',
     height: 6,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: '#3A3A3C',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -242,7 +269,7 @@ const styles = StyleSheet.create({
   skipping: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF9500',
+    color: '#FF9F0A',
   },
   debugRow: {
     flexDirection: 'row',
@@ -251,12 +278,12 @@ const styles = StyleSheet.create({
   },
   debugText: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#98989F',
     fontVariant: ['tabular-nums'],
   },
   debugDivider: {
     fontSize: 14,
-    color: '#D1D1D6',
+    color: '#48484A',
   },
   controls: {
     flexDirection: 'row',
@@ -265,7 +292,7 @@ const styles = StyleSheet.create({
   button: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#0A84FF',
     borderRadius: 8,
   },
   buttonText: {
@@ -276,18 +303,18 @@ const styles = StyleSheet.create({
   toggle: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: '#8E8E93',
+    backgroundColor: '#636366',
     borderRadius: 8,
   },
   toggleActive: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#30D158',
   },
   buttonDisabled: {
     opacity: 0.4,
   },
   error: {
     fontSize: 14,
-    color: '#FF3B30',
+    color: '#FF453A',
     fontWeight: '500',
     textAlign: 'center',
   },
