@@ -186,8 +186,8 @@ export default function App() {
           </Pressable>
 
           <View style={styles.controls}>
-            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekBack()} disabled={isLoading}>
-              <Text style={styles.buttonText}>-30s</Text>
+            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekBack(5000)} disabled={isLoading}>
+              <Text style={styles.buttonText}>-5s</Text>
             </Pressable>
 
             <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={handlePlayPause} disabled={isLoading}>
@@ -198,8 +198,8 @@ export default function App() {
               <Text style={styles.buttonText}>Stop</Text>
             </Pressable>
 
-            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekForward()} disabled={isLoading}>
-              <Text style={styles.buttonText}>+30s</Text>
+            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekForward(15000)} disabled={isLoading}>
+              <Text style={styles.buttonText}>+15s</Text>
             </Pressable>
           </View>
         </View>
