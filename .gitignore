@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# generated audio files
+/scripts/*.wav
+/scripts/*.mp3
+/scripts/**/*.aiff
