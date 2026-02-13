@@ -50,7 +50,34 @@ const STATE_STYLES: Record<string, { bg: string; text: string; border: string }>
 
 const RATE_PRESETS = [0.8, 1, 1.1, 1.2, 1.5, 2] as const;
 
+type AudioSourceId = 'deborah' | 'threeD';
+
+type AudioSource = {
+  id: AudioSourceId;
+  trackId: string;
+  title: string;
+  asset: Asset;
+};
+
 const DEBORAH = Asset.fromModule(require('./assets/66_Deborah.mp3'));
+const THREE_D = Asset.fromModule(require('./assets/3d-2s.mp3'));
+
+const AUDIO_SOURCES: readonly AudioSource[] = [
+  {
+    id: 'deborah',
+    trackId: 'debug-podcast-deborah',
+    title: '66 Deborah',
+    asset: DEBORAH,
+  },
+  {
+    id: 'threeD',
+    trackId: 'debug-podcast-3d-2s',
+    title: '3D 2s',
+    asset: THREE_D,
+  },
+] as const;
+
+const DEFAULT_SOURCE_ID: AudioSourceId = 'deborah';
 
 AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: true, debug: true });
 
@@ -65,7 +92,13 @@ export default function App() {
   const volume = useAudioPro(s => s.volume);
   const error = useAudioPro(s => s.error);
 
-  const [localUri, setLocalUri] = useState<string | null>(DEBORAH.localUri);
+  const [selectedSourceId, setSelectedSourceId] = useState<AudioSourceId>(DEFAULT_SOURCE_ID);
+  const [resolvedLocalUris, setResolvedLocalUris] = useState<Record<AudioSourceId, string | undefined>>(
+    () => ({
+      deborah: DEBORAH.localUri ?? undefined,
+      threeD: THREE_D.localUri ?? undefined,
+    }),
+  );
   const [barWidth, setBarWidth] = useState(0);
   const [cpuUsage, setCpuUsage] = useState<number | null>(() => {
     try {
@@ -97,11 +130,34 @@ export default function App() {
   }, [isLoading, loadingOpacity]);
 
   useEffect(() => {
-    if (localUri) return;
-    DEBORAH
-      .downloadAsync()
-      .then((asset) => setLocalUri(asset.localUri!));
-  }, [localUri]);
+    const source = AUDIO_SOURCES.find((entry) => entry.id === selectedSourceId);
+    if (!source) return;
+    const knownUri = resolvedLocalUris[source.id] ?? source.asset.localUri ?? undefined;
+    if (knownUri) {
+      setResolvedLocalUris((prev) =>
+        prev[source.id] === knownUri
+          ? prev
+          : {
+              ...prev,
+              [source.id]: knownUri,
+            },
+      );
+      return;
+    }
+
+    let cancelled = false;
+    source.asset.downloadAsync().then((asset) => {
+      if (cancelled || !asset.localUri) return;
+      setResolvedLocalUris((prev) => ({
+        ...prev,
+        [source.id]: asset.localUri!,
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedLocalUris, selectedSourceId]);
 
   useEffect(() => {
     try {
@@ -115,15 +171,22 @@ export default function App() {
     }
   }, []);
 
+  const selectedSource = useMemo(
+    () => AUDIO_SOURCES.find((source) => source.id === selectedSourceId) ?? AUDIO_SOURCES[0],
+    [selectedSourceId],
+  );
+
+  const selectedLocalUri = resolvedLocalUris[selectedSource.id] ?? selectedSource.asset.localUri ?? null;
+
   const track = useMemo(() => {
-    if (!localUri) return null;
+    if (!selectedLocalUri) return null;
     return {
-      id: 'debug-podcast',
-      url: localUri,
-      title: 'Debug Podcast',
+      id: selectedSource.trackId,
+      url: selectedLocalUri,
+      title: selectedSource.title,
       artwork: 'https://e1.nmcdn.io/pushkin/wp-content/uploads/2025/03/Heavyweight-Pushkin-1080.png/v:1-dynamic:1-aspect:1-fit:cover/Heavyweight-Pushkin-1080--600.webp',
     };
-  }, [localUri]);
+  }, [selectedLocalUri, selectedSource]);
 
   const toggleSilenceSkip = () => {
     if (!track) return;
@@ -146,6 +209,17 @@ export default function App() {
   const handleSetPlaybackSpeed = (rate: number) => {
     AudioPro.setPlaybackSpeed(rate);
   };
+
+  const handleSelectSource = useCallback(
+    (nextSourceId: AudioSourceId) => {
+      if (nextSourceId === selectedSourceId) return;
+      setSelectedSourceId(nextSourceId);
+      if (state !== AudioProState.IDLE && state !== AudioProState.STOPPED) {
+        AudioPro.stop();
+      }
+    },
+    [selectedSourceId, state],
+  );
 
   const handleProgressPress = useCallback(
     (e: { nativeEvent: { locationX: number } }) => {
@@ -227,6 +301,31 @@ export default function App() {
                 Skipping silence at {silenceSkipSpeed.toFixed(1)}x
               </Text>
             </Animated.View>
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Audio Source</Text>
+            <View style={styles.sourceWrap}>
+              {AUDIO_SOURCES.map((source) => {
+                const isActive = source.id === selectedSourceId;
+                return (
+                  <Pressable
+                    key={source.id}
+                    style={[
+                      styles.sourceButton,
+                      isActive && styles.sourceButtonActive,
+                      isLoading && styles.buttonDisabled,
+                    ]}
+                    onPress={() => handleSelectSource(source.id)}
+                    disabled={isLoading}
+                  >
+                    <Text style={[styles.sourceButtonText, isActive && styles.sourceButtonTextActive]}>
+                      {source.title}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           <View style={styles.panel}>
@@ -525,6 +624,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  sourceWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sourceButton: {
+    minWidth: 120,
+    backgroundColor: THEME.surfaceAlt,
+    borderColor: THEME.border,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  sourceButtonActive: {
+    backgroundColor: '#12392B',
+    borderColor: '#2A7A5A',
+  },
+  sourceButtonText: {
+    color: THEME.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sourceButtonTextActive: {
+    color: '#A7F3D0',
   },
   rateButton: {
     minWidth: 64,
