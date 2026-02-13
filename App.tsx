@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Animated,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -25,14 +26,29 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-const STATE_COLORS: Record<string, string> = {
-  [AudioProState.PLAYING]: '#30D158',
-  [AudioProState.LOADING]: '#FF9F0A',
-  [AudioProState.PAUSED]: '#FF9F0A',
-  [AudioProState.ERROR]: '#FF453A',
-  [AudioProState.IDLE]: '#98989F',
-  [AudioProState.STOPPED]: '#98989F',
+const THEME = {
+  bg: '#090E16',
+  surface: '#121A27',
+  surfaceAlt: '#1A2434',
+  border: '#2B3A53',
+  text: '#F4F8FF',
+  textMuted: '#91A3BF',
+  accent: '#38BDF8',
+  warning: '#F59E0B',
+  success: '#34D399',
+  danger: '#F87171',
 };
+
+const STATE_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+  [AudioProState.PLAYING]: { bg: '#113928', text: '#6EE7B7', border: '#1F7A52' },
+  [AudioProState.LOADING]: { bg: '#4A2A00', text: '#FCD34D', border: '#9A6700' },
+  [AudioProState.PAUSED]: { bg: '#1E2B3F', text: '#93C5FD', border: '#31568D' },
+  [AudioProState.ERROR]: { bg: '#4A1616', text: '#FCA5A5', border: '#9F2E2E' },
+  [AudioProState.IDLE]: { bg: '#1C2433', text: '#C7D2E7', border: '#334561' },
+  [AudioProState.STOPPED]: { bg: '#1C2433', text: '#C7D2E7', border: '#334561' },
+};
+
+const RATE_PRESETS = [0.8, 1, 1.1, 1.2, 1.5, 2] as const;
 
 const DEBORAH = Asset.fromModule(require('./assets/66_Deborah.mp3'));
 
@@ -127,6 +143,10 @@ export default function App() {
     }
   };
 
+  const handleSetPlaybackSpeed = (rate: number) => {
+    AudioPro.setPlaybackSpeed(rate);
+  };
+
   const handleProgressPress = useCallback(
     (e: { nativeEvent: { locationX: number } }) => {
       if (duration <= 0 || barWidth <= 0) return;
@@ -139,103 +159,182 @@ export default function App() {
   const playPauseLabel =
     state === AudioProState.PLAYING ? 'Pause' : 'Play';
 
-  const progressPercent = duration > 0 ? (position / duration) * 100 : 0;
-  const stateColor = STATE_COLORS[state] ?? '#98989F';
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (position / duration) * 100)) : 0;
   const cpuUsageDisplay =
     cpuUsage != null && Number.isFinite(cpuUsage)
       ? `${Math.max(0, cpuUsage).toFixed(0)}%`
       : '--%';
+  const stateStyle = STATE_STYLES[state] ?? STATE_STYLES[AudioProState.IDLE];
 
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.section}>
-          <Text style={styles.title}>Debug Podcast</Text>
-          <View style={styles.stateRow}>
-            <Text style={[styles.state, { color: stateColor }]}>{state}</Text>
-            <Animated.View style={{ opacity: loadingOpacity }}>
-              <ActivityIndicator size="small" color="#FF9F0A" />
-            </Animated.View>
-          </View>
-        </View>
-
-        {/* Playback */}
-        <View style={styles.section}>
-          <Text style={styles.time}>
-            {formatTime(position)} / {formatTime(duration)}
-          </Text>
-          <Text style={styles.timeMs}>
-            {position} ms / {duration} ms
-          </Text>
-          <Pressable
-            style={styles.progressTrack}
-            onPress={handleProgressPress}
-            onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
-          >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={styles.panel}>
+            <View style={styles.headerTopRow}>
+              <Text style={styles.title}>AudioPro Debug Console</Text>
+              <Animated.View style={[styles.loadingWrap, { opacity: loadingOpacity }]}>
+                <ActivityIndicator size="small" color={THEME.warning} />
+              </Animated.View>
+            </View>
             <View
               style={[
-                styles.progressFill,
+                styles.stateBadge,
                 {
-                  width: `${progressPercent}%`,
-                  backgroundColor: isSkippingSilence ? '#FF9F0A' : '#0A84FF',
+                  backgroundColor: stateStyle.bg,
+                  borderColor: stateStyle.border,
                 },
               ]}
-            />
-          </Pressable>
-          <Animated.Text style={[styles.skipping, { opacity: skippingOpacity }]}>
-            Skipping Silence ({silenceSkipSpeed.toFixed(1)}x)
-          </Animated.Text>
-        </View>
+            >
+              <Text style={[styles.stateBadgeText, { color: stateStyle.text }]}>{state}</Text>
+            </View>
+          </View>
 
-        {/* Debug */}
-        <View style={styles.debugRow}>
-          <Text style={styles.debugText}>Speed: {playbackSpeed.toFixed(1)}x</Text>
-          <Text style={styles.debugDivider}>|</Text>
-          <Text style={styles.debugText}>Skip Speed: {silenceSkipSpeed.toFixed(1)}x</Text>
-          <Text style={styles.debugDivider}>|</Text>
-          <Text style={styles.debugText}>Vol: {Math.round(volume * 100)}%</Text>
-          <Text style={styles.debugDivider}>|</Text>
-          <Text style={styles.debugText}>CPU: {cpuUsageDisplay}</Text>
-        </View>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Transport</Text>
+            <View style={styles.timeRow}>
+              <Text style={styles.timePrimary}>
+                {formatTime(position)} / {formatTime(duration)}
+              </Text>
+              <Text style={styles.timeSecondary}>
+                {position} ms / {duration} ms
+              </Text>
+            </View>
 
-        {/* Controls */}
-        <View style={styles.section}>
-          <Pressable
-            style={[styles.toggle, silenceSkip && styles.toggleActive, isLoading && styles.buttonDisabled]}
-            onPress={toggleSilenceSkip}
-            disabled={isLoading}
-          >
-            <Text style={styles.buttonText}>
-              Silence Skip: {silenceSkip ? 'ON' : 'OFF'}
-            </Text>
-          </Pressable>
-
-          <View style={styles.controls}>
-            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekBack(5000)} disabled={isLoading}>
-              <Text style={styles.buttonText}>-5s</Text>
+            <Pressable
+              style={styles.progressTrack}
+              onPress={handleProgressPress}
+              onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+            >
+              <View style={styles.progressBackground} />
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${progressPercent}%`,
+                    backgroundColor: isSkippingSilence ? THEME.warning : THEME.accent,
+                  },
+                ]}
+              />
             </Pressable>
 
-            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={handlePlayPause} disabled={isLoading}>
-              <Text style={styles.buttonText}>{playPauseLabel}</Text>
-            </Pressable>
+            <Animated.View style={[styles.skipBanner, { opacity: skippingOpacity }]}>
+              <Text style={styles.skipBannerText}>
+                Skipping silence at {silenceSkipSpeed.toFixed(1)}x
+              </Text>
+            </Animated.View>
+          </View>
 
-            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.stop()} disabled={isLoading}>
-              <Text style={styles.buttonText}>Stop</Text>
-            </Pressable>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Telemetry</Text>
+            <View style={styles.chipsWrap}>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>Speed</Text>
+                <Text style={styles.metricValue}>{playbackSpeed.toFixed(1)}x</Text>
+              </View>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>Skip Speed</Text>
+                <Text style={styles.metricValue}>{silenceSkipSpeed.toFixed(1)}x</Text>
+              </View>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>Volume</Text>
+                <Text style={styles.metricValue}>{Math.round(volume * 100)}%</Text>
+              </View>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>CPU</Text>
+                <Text style={styles.metricValue}>{cpuUsageDisplay}</Text>
+              </View>
+            </View>
+          </View>
 
-            <Pressable style={[styles.button, isLoading && styles.buttonDisabled]} onPress={() => AudioPro.seekForward(15000)} disabled={isLoading}>
-              <Text style={styles.buttonText}>+15s</Text>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Controls</Text>
+            <View style={styles.controlsRow}>
+              <Pressable
+                style={[styles.controlButton, isLoading && styles.buttonDisabled]}
+                onPress={() => AudioPro.seekBack(5000)}
+                disabled={isLoading}
+              >
+                <Text style={styles.controlButtonText}>-5s</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.controlButton, styles.controlButtonPrimary, isLoading && styles.buttonDisabled]}
+                onPress={handlePlayPause}
+                disabled={isLoading}
+              >
+                <Text style={styles.controlButtonText}>{playPauseLabel}</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.controlButton, styles.controlButtonDanger, isLoading && styles.buttonDisabled]}
+                onPress={() => AudioPro.stop()}
+                disabled={isLoading}
+              >
+                <Text style={styles.controlButtonText}>Stop</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.controlButton, isLoading && styles.buttonDisabled]}
+                onPress={() => AudioPro.seekForward(15000)}
+                disabled={isLoading}
+              >
+                <Text style={styles.controlButtonText}>+15s</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={[
+                styles.toggleButton,
+                silenceSkip ? styles.toggleButtonActive : styles.toggleButtonInactive,
+                isLoading && styles.buttonDisabled,
+              ]}
+              onPress={toggleSilenceSkip}
+              disabled={isLoading}
+            >
+              <Text style={styles.toggleButtonText}>
+                Silence Skip: {silenceSkip ? 'ON' : 'OFF'}
+              </Text>
             </Pressable>
           </View>
-        </View>
 
-        {/* Error */}
-        {error && (
-          <Text style={styles.error}>
-            Error: {error.error}{error.errorCode != null ? ` (${error.errorCode})` : ''}
-          </Text>
-        )}
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Playback Rate</Text>
+            <View style={styles.rateWrap}>
+              {RATE_PRESETS.map((rate) => {
+                const isActive = Math.abs(playbackSpeed - rate) < 0.01;
+                return (
+                  <Pressable
+                    key={rate}
+                    style={[
+                      styles.rateButton,
+                      isActive && styles.rateButtonActive,
+                      isLoading && styles.buttonDisabled,
+                    ]}
+                    onPress={() => handleSetPlaybackSpeed(rate)}
+                    disabled={isLoading}
+                  >
+                    <Text style={[styles.rateButtonText, isActive && styles.rateButtonTextActive]}>
+                      {rate}x
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {error && (
+            <View style={styles.errorPanel}>
+              <Text style={styles.errorText}>
+                Error: {error.error}{error.errorCode != null ? ` (${error.errorCode})` : ''}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
 
         <StatusBar style="light" />
       </SafeAreaView>
@@ -246,102 +345,224 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C1C1E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-    paddingHorizontal: 24,
+    backgroundColor: THEME.bg,
   },
-  section: {
-    alignItems: 'center',
-    gap: 8,
-    width: '100%',
+  content: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 16,
+    gap: 10,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  panel: {
+    backgroundColor: THEME.surface,
+    borderColor: THEME.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
   },
-  stateRow: {
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  state: {
-    fontSize: 16,
-    fontWeight: '600',
+  loadingWrap: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  time: {
+  title: {
+    color: THEME.text,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  stateBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  stateBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  panelTitle: {
+    color: THEME.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  timeRow: {
+    gap: 2,
+  },
+  timePrimary: {
+    color: THEME.text,
     fontSize: 18,
+    fontWeight: '700',
     fontVariant: ['tabular-nums'],
-    color: '#FFFFFF',
   },
-  timeMs: {
+  timeSecondary: {
+    color: THEME.textMuted,
     fontSize: 12,
     fontVariant: ['tabular-nums'],
-    color: '#98989F',
   },
   progressTrack: {
-    width: '100%',
-    height: 6,
-    backgroundColor: '#3A3A3C',
-    borderRadius: 3,
+    height: 14,
+    borderRadius: 8,
     overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  progressBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: THEME.surfaceAlt,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 8,
   },
-  skipping: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FF9F0A',
+  skipBanner: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#4A2A00',
+    borderColor: '#8A5C00',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  debugRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  debugText: {
-    fontSize: 14,
-    color: '#98989F',
+  skipBannerText: {
+    color: '#FCD34D',
+    fontSize: 12,
+    fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  debugDivider: {
-    fontSize: 14,
-    color: '#48484A',
-  },
-  controls: {
+  chipsWrap: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  button: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#0A84FF',
+  metricChip: {
+    minWidth: 100,
+    flexGrow: 1,
+    backgroundColor: THEME.surfaceAlt,
+    borderColor: THEME.border,
+    borderWidth: 1,
     borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
   },
-  buttonText: {
-    color: '#fff',
+  metricLabel: {
+    color: THEME.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  metricValue: {
+    color: THEME.text,
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
-  toggle: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#636366',
+  controlsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  controlButton: {
+    flexGrow: 1,
+    minWidth: 72,
+    backgroundColor: '#223049',
+    borderColor: '#33507A',
+    borderWidth: 1,
     borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
   },
-  toggleActive: {
-    backgroundColor: '#30D158',
+  controlButtonPrimary: {
+    backgroundColor: '#124D71',
+    borderColor: '#2D89BD',
+  },
+  controlButtonDanger: {
+    backgroundColor: '#4A1E26',
+    borderColor: '#8C3342',
+  },
+  controlButtonText: {
+    color: THEME.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  toggleButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#12392B',
+    borderColor: '#2A7A5A',
+  },
+  toggleButtonInactive: {
+    backgroundColor: '#2C2F38',
+    borderColor: '#495063',
+  },
+  toggleButtonText: {
+    color: THEME.text,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  rateWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  rateButton: {
+    minWidth: 64,
+    backgroundColor: THEME.surfaceAlt,
+    borderColor: THEME.border,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  rateButtonActive: {
+    backgroundColor: '#133A4B',
+    borderColor: THEME.accent,
+  },
+  rateButtonText: {
+    color: THEME.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  rateButtonTextActive: {
+    color: '#BAE6FD',
   },
   buttonDisabled: {
-    opacity: 0.4,
+    opacity: 0.45,
   },
-  error: {
-    fontSize: 14,
-    color: '#FF453A',
-    fontWeight: '500',
-    textAlign: 'center',
+  errorPanel: {
+    borderColor: '#8C3342',
+    borderWidth: 1,
+    backgroundColor: '#4A1E26',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  errorText: {
+    color: THEME.danger,
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
