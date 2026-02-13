@@ -16,6 +16,7 @@ import {
 } from 'react-native-audio-pro';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Asset } from 'expo-asset';
+import { getCpuUsage, onCpuChange } from 'react-native-performance-toolkit';
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -50,6 +51,13 @@ export default function App() {
 
   const [localUri, setLocalUri] = useState<string | null>(DEBORAH.localUri);
   const [barWidth, setBarWidth] = useState(0);
+  const [cpuUsage, setCpuUsage] = useState<number | null>(() => {
+    try {
+      return getCpuUsage();
+    } catch {
+      return null;
+    }
+  });
 
   const skippingOpacity = useRef(new Animated.Value(0)).current;
   const loadingOpacity = useRef(new Animated.Value(0)).current;
@@ -78,6 +86,18 @@ export default function App() {
       .downloadAsync()
       .then((asset) => setLocalUri(asset.localUri!));
   }, [localUri]);
+
+  useEffect(() => {
+    try {
+      const unsubscribe = onCpuChange((nextCpuUsage) => {
+        setCpuUsage(nextCpuUsage);
+      });
+      return unsubscribe;
+    } catch {
+      setCpuUsage(null);
+      return undefined;
+    }
+  }, []);
 
   const track = useMemo(() => {
     if (!localUri) return null;
@@ -121,6 +141,10 @@ export default function App() {
 
   const progressPercent = duration > 0 ? (position / duration) * 100 : 0;
   const stateColor = STATE_COLORS[state] ?? '#98989F';
+  const cpuUsageDisplay =
+    cpuUsage != null && Number.isFinite(cpuUsage)
+      ? `${Math.max(0, cpuUsage).toFixed(0)}%`
+      : '--%';
 
   return (
     <SafeAreaProvider>
@@ -171,6 +195,8 @@ export default function App() {
           <Text style={styles.debugText}>Skip Speed: {silenceSkipSpeed.toFixed(1)}x</Text>
           <Text style={styles.debugDivider}>|</Text>
           <Text style={styles.debugText}>Vol: {Math.round(volume * 100)}%</Text>
+          <Text style={styles.debugDivider}>|</Text>
+          <Text style={styles.debugText}>CPU: {cpuUsageDisplay}</Text>
         </View>
 
         {/* Controls */}
