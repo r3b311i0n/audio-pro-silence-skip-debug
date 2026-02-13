@@ -52,7 +52,7 @@ const RATE_PRESETS = [0.8, 1, 1.1, 1.2, 1.5, 2] as const;
 
 const DEBORAH = Asset.fromModule(require('./assets/66_Deborah.mp3'));
 
-AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: true });
+AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: true, debug: true });
 
 export default function App() {
   const state = useAudioPro(s => s.playerState);
@@ -128,7 +128,7 @@ export default function App() {
   const toggleSilenceSkip = () => {
     if (!track) return;
     const next = !silenceSkip;
-    AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: next });
+    AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: next, debug: true });
     AudioPro.stop();
   };
 
