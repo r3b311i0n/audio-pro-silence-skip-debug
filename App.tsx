@@ -79,13 +79,13 @@ const AUDIO_SOURCES: readonly AudioSource[] = [
 
 const DEFAULT_SOURCE_ID: AudioSourceId = 'deborah';
 
-AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: true, debug: true });
+AudioPro.configure({ contentType: AudioProContentType.SPEECH, debug: true });
 
 export default function App() {
   const state = useAudioPro(s => s.playerState);
   const position = useAudioPro(s => s.position);
   const duration = useAudioPro(s => s.duration);
-  const silenceSkip = useAudioPro(s => s.configureOptions.silenceSkip);
+  const silenceSkip = useAudioPro(s => s.silenceSkipEnabled);
   const isSkippingSilence = useAudioPro(s => s.isSkippingSilence);
   const playbackSpeed = useAudioPro(s => s.playbackSpeed);
   const silenceSkipSpeed = useAudioPro(s => s.silenceSkipSpeed);
@@ -191,8 +191,7 @@ export default function App() {
   const toggleSilenceSkip = () => {
     if (!track) return;
     const next = !silenceSkip;
-    AudioPro.configure({ contentType: AudioProContentType.SPEECH, silenceSkip: next, debug: true });
-    AudioPro.stop();
+    AudioPro.setSilenceSkipEnabled(next);
   };
 
   const handlePlayPause = () => {
