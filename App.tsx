@@ -79,7 +79,15 @@ const AUDIO_SOURCES: readonly AudioSource[] = [
 
 const DEFAULT_SOURCE_ID: AudioSourceId = 'deborah';
 
-AudioPro.configure({ contentType: AudioProContentType.SPEECH, debug: true });
+AudioPro.configure({
+  contentType: AudioProContentType.SPEECH,
+  allowLockScreenScrubbing: true,
+  showNextPrevControls: false,
+  showSkipControls: true,
+  skipBackMs: 5000,
+  skipForwardMs: 15000,
+  debug: true,
+});
 
 export default function App() {
   const state = useAudioPro(s => s.playerState);
@@ -138,9 +146,9 @@ export default function App() {
         prev[source.id] === knownUri
           ? prev
           : {
-              ...prev,
-              [source.id]: knownUri,
-            },
+            ...prev,
+            [source.id]: knownUri,
+          },
       );
       return;
     }
