@@ -18,7 +18,7 @@
     "expo-updates": "~29.0.16",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-audio-pro": "github:r3b311i0n/react-native-audio-pro#49adaefe253f994e9d21440be2edeffd23451da3",
+    "react-native-audio-pro": "github:r3b311i0n/react-native-audio-pro#da127e058f398029a1299745f1fc2ffba100ba9b",
     "react-native-nitro-modules": "^0.33.9",
     "react-native-performance-toolkit": "^0.2.1",
     "react-native-safe-area-context": "~5.6.0",
