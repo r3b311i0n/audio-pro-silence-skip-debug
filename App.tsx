@@ -49,6 +49,8 @@ const STATE_STYLES: Record<string, { bg: string; text: string; border: string }>
 };
 
 const RATE_PRESETS = [0.8, 1, 1.1, 1.2, 1.5, 2] as const;
+const SEEK_FORWARD_MS = 15000;
+const SEEK_BACK_MS = 5000;
 
 type AudioSourceId = 'deborah' | 'threeD';
 
@@ -84,8 +86,8 @@ AudioPro.configure({
   allowLockScreenScrubbing: true,
   showNextPrevControls: false,
   showSkipControls: true,
-  skipBackMs: 5000,
-  skipForwardMs: 15000,
+  skipBackMs: SEEK_BACK_MS,
+  skipForwardMs: SEEK_FORWARD_MS,
   debug: true,
 });
 
@@ -362,10 +364,10 @@ export default function App() {
             <View style={styles.controlsRow}>
               <Pressable
                 style={[styles.controlButton, isLoading && styles.buttonDisabled]}
-                onPress={() => AudioPro.seekBack(5000)}
+                onPress={() => AudioPro.seekBack(SEEK_BACK_MS)}
                 disabled={isLoading}
               >
-                <Text style={styles.controlButtonText}>-5s</Text>
+                <Text style={styles.controlButtonText}>-{SEEK_BACK_MS / 1000}s</Text>
               </Pressable>
 
               <Pressable
@@ -386,10 +388,10 @@ export default function App() {
 
               <Pressable
                 style={[styles.controlButton, isLoading && styles.buttonDisabled]}
-                onPress={() => AudioPro.seekForward(15000)}
+                onPress={() => AudioPro.seekForward(SEEK_FORWARD_MS)}
                 disabled={isLoading}
               >
-                <Text style={styles.controlButtonText}>+15s</Text>
+                <Text style={styles.controlButtonText}>+{SEEK_FORWARD_MS / 1000}s</Text>
               </Pressable>
             </View>
 
