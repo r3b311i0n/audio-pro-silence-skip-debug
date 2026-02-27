@@ -52,7 +52,7 @@ const RATE_PRESETS = [0.8, 1, 1.1, 1.2, 1.5, 2] as const;
 const SEEK_FORWARD_MS = 15000;
 const SEEK_BACK_MS = 5000;
 
-type AudioSourceId = 'deborah' | 'threeD';
+type AudioSourceId = 'deborah' | 'deborahVb' | 'threeD';
 
 type AudioSource = {
   id: AudioSourceId;
@@ -62,6 +62,7 @@ type AudioSource = {
 };
 
 const DEBORAH = Asset.fromModule(require('./assets/66_Deborah.mp3'));
+const DEBORAH_VB = Asset.fromModule(require('./assets/66_Deborah-vb.mp3'));
 const THREE_D = Asset.fromModule(require('./assets/3d-2s.mp3'));
 
 const AUDIO_SOURCES: readonly AudioSource[] = [
@@ -70,6 +71,12 @@ const AUDIO_SOURCES: readonly AudioSource[] = [
     trackId: 'debug-podcast-deborah',
     title: '66 Deborah',
     asset: DEBORAH,
+  },
+  {
+    id: 'deborahVb',
+    trackId: 'debug-podcast-deborah-vb',
+    title: '66 Deborah (VB)',
+    asset: DEBORAH_VB,
   },
   {
     id: 'threeD',
@@ -108,6 +115,7 @@ export default function App() {
   const [resolvedLocalUris, setResolvedLocalUris] = useState<Record<AudioSourceId, string | undefined>>(
     () => ({
       deborah: DEBORAH.localUri ?? undefined,
+      deborahVb: DEBORAH_VB.localUri ?? undefined,
       threeD: THREE_D.localUri ?? undefined,
     }),
   );
