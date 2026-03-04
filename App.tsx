@@ -96,7 +96,6 @@ AudioPro.configure({
   skipBackMs: SEEK_BACK_MS,
   skipForwardMs: SEEK_FORWARD_MS,
   debug: true,
-  voiceBoost: true,
 });
 
 export default function App() {
@@ -105,6 +104,7 @@ export default function App() {
   const duration = useAudioPro(s => s.duration);
   const silenceSkip = useAudioPro(s => s.silenceSkipEnabled);
   const voiceBoostEnabled = useAudioPro(s => s.voiceBoostEnabled);
+  const normalizationEnabled = useAudioPro(s => s.normalizationEnabled);
   const isSkippingSilence = useAudioPro(s => s.isSkippingSilence);
   const playbackSpeed = useAudioPro(s => s.playbackSpeed);
   const silenceSkipSpeed = useAudioPro(s => s.silenceSkipSpeed);
@@ -218,6 +218,12 @@ export default function App() {
     if (!track) return;
     const next = !voiceBoostEnabled;
     AudioPro.setVoiceBoostEnabled(next);
+  };
+
+  const toggleNormalization = () => {
+    if (!track) return;
+    const next = !normalizationEnabled;
+    AudioPro.setNormalizationEnabled(next);
   };
 
   const handlePlayPause = () => {
@@ -436,6 +442,20 @@ export default function App() {
             >
               <Text style={styles.toggleButtonText}>
                 Voice Boost: {voiceBoostEnabled ? 'ON' : 'OFF'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.toggleButton,
+                normalizationEnabled ? styles.toggleButtonActive : styles.toggleButtonInactive,
+                isLoading && styles.buttonDisabled,
+              ]}
+              onPress={toggleNormalization}
+              disabled={isLoading}
+            >
+              <Text style={styles.toggleButtonText}>
+                Loudness Normalizer: {normalizationEnabled ? 'ON' : 'OFF'}
               </Text>
             </Pressable>
           </View>
