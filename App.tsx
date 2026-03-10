@@ -14,6 +14,7 @@ import {
   useAudioPro,
   AudioProState,
   AudioProContentType,
+  AudioProEventType,
 } from 'react-native-audio-pro';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Asset } from 'expo-asset';
@@ -51,6 +52,16 @@ const STATE_STYLES: Record<string, { bg: string; text: string; border: string }>
 const RATE_PRESETS = [0.8, 1, 1.1, 1.2, 1.5, 2] as const;
 const SEEK_FORWARD_MS = 15000;
 const SEEK_BACK_MS = 5000;
+const SLEEP_TIMER_PRESET_MINUTES = [1, 5, 10, 15] as const;
+const SLEEP_TIMER_STEP_MS = 60000;
+const SLEEP_TIMER_INTERVAL_PRESETS_MS = [100, 250, 1000, 5000, 10000] as const;
+
+type SleepTimerSnapshot = {
+  remainingMs: number;
+  totalMs: number;
+  isActive: boolean;
+  isRunning: boolean;
+};
 
 type AudioSourceId = 'deborah' | 'deborahVb' | 'threeD';
 
@@ -110,6 +121,10 @@ export default function App() {
   const silenceSkipSpeed = useAudioPro(s => s.silenceSkipSpeed);
   const volume = useAudioPro(s => s.volume);
   const error = useAudioPro(s => s.error);
+  const sleepTimerRemainingMs = useAudioPro(s => s.sleepTimerRemainingMs);
+  const sleepTimerTotalMs = useAudioPro(s => s.sleepTimerTotalMs);
+  const isSleepTimerActive = useAudioPro(s => s.isSleepTimerActive);
+  const isSleepTimerRunning = useAudioPro(s => s.isSleepTimerRunning);
 
   const [selectedSourceId, setSelectedSourceId] = useState<AudioSourceId>(DEFAULT_SOURCE_ID);
   const [resolvedLocalUris, setResolvedLocalUris] = useState<Record<AudioSourceId, string | undefined>>(
@@ -120,6 +135,18 @@ export default function App() {
     }),
   );
   const [barWidth, setBarWidth] = useState(0);
+  const [sleepTimerSnapshot, setSleepTimerSnapshot] = useState<SleepTimerSnapshot>(() =>
+    AudioPro.getSleepTimer(),
+  );
+  const [sleepTimerProgressIntervalMs, setSleepTimerProgressIntervalMs] = useState<number>(() =>
+    AudioPro.getSleepTimerProgressInterval(),
+  );
+  const [sleepTimerEndedCount, setSleepTimerEndedCount] = useState(0);
+  const [lastSleepTimerEvent, setLastSleepTimerEvent] = useState<{
+    type: AudioProEventType.SLEEP_TIMER_PROGRESS | AudioProEventType.SLEEP_TIMER_ENDED;
+    atMs: number;
+    snapshot: SleepTimerSnapshot;
+  } | null>(null);
   const [cpuUsage, setCpuUsage] = useState<number | null>(() => {
     try {
       return getCpuUsage();
@@ -191,6 +218,39 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const subscription = AudioPro.addEventListener((event) => {
+      if (
+        event.type !== AudioProEventType.SLEEP_TIMER_PROGRESS &&
+        event.type !== AudioProEventType.SLEEP_TIMER_ENDED
+      ) {
+        return;
+      }
+
+      const payload = event.payload;
+      const snapshot: SleepTimerSnapshot = {
+        remainingMs: payload?.remainingMs ?? 0,
+        totalMs: payload?.totalMs ?? 0,
+        isActive: payload?.isActive ?? false,
+        isRunning: payload?.isRunning ?? false,
+      };
+
+      setSleepTimerSnapshot(snapshot);
+      setLastSleepTimerEvent({
+        type: event.type,
+        atMs: Date.now(),
+        snapshot,
+      });
+      if (event.type === AudioProEventType.SLEEP_TIMER_ENDED) {
+        setSleepTimerEndedCount((count) => count + 1);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const selectedSource = useMemo(
     () => AUDIO_SOURCES.find((source) => source.id === selectedSourceId) ?? AUDIO_SOURCES[0],
     [selectedSourceId],
@@ -241,6 +301,35 @@ export default function App() {
     AudioPro.setPlaybackSpeed(rate);
   };
 
+  const handleSetSleepTimer = useCallback((minutes: number) => {
+    AudioPro.setSleepTimer(minutes * 60 * 1000);
+  }, []);
+
+  const handleAddToSleepTimer = useCallback(() => {
+    AudioPro.addToSleepTimer(SLEEP_TIMER_STEP_MS);
+  }, []);
+
+  const handleSubtractFromSleepTimer = useCallback(() => {
+    AudioPro.subtractFromSleepTimer(SLEEP_TIMER_STEP_MS);
+  }, []);
+
+  const handleClearSleepTimer = useCallback(() => {
+    AudioPro.clearSleepTimer();
+  }, []);
+
+  const handleGetSleepTimerSnapshot = useCallback(() => {
+    setSleepTimerSnapshot(AudioPro.getSleepTimer());
+  }, []);
+
+  const handleSetSleepTimerInterval = useCallback((intervalMs: number) => {
+    AudioPro.setSleepTimerProgressInterval(intervalMs);
+    setSleepTimerProgressIntervalMs(AudioPro.getSleepTimerProgressInterval());
+  }, []);
+
+  const handleGetSleepTimerInterval = useCallback(() => {
+    setSleepTimerProgressIntervalMs(AudioPro.getSleepTimerProgressInterval());
+  }, []);
+
   const handleSelectSource = useCallback(
     (nextSourceId: AudioSourceId) => {
       if (nextSourceId === selectedSourceId) return;
@@ -265,6 +354,17 @@ export default function App() {
     state === AudioProState.PLAYING ? 'Pause' : 'Play';
 
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (position / duration) * 100)) : 0;
+  const sleepTimerProgressPercent =
+    sleepTimerTotalMs > 0
+      ? Math.min(100, Math.max(0, (sleepTimerRemainingMs / sleepTimerTotalMs) * 100))
+      : 0;
+  const sleepTimerSnapshotPercent =
+    sleepTimerSnapshot.totalMs > 0
+      ? Math.min(100, Math.max(0, (sleepTimerSnapshot.remainingMs / sleepTimerSnapshot.totalMs) * 100))
+      : 0;
+  const lastSleepTimerEventLabel = lastSleepTimerEvent
+    ? `${lastSleepTimerEvent.type} @ ${new Date(lastSleepTimerEvent.atMs).toLocaleTimeString()}`
+    : 'None';
   const cpuUsageDisplay =
     cpuUsage != null && Number.isFinite(cpuUsage)
       ? `${Math.max(0, cpuUsage).toFixed(0)}%`
@@ -458,6 +558,113 @@ export default function App() {
                 Loudness Normalizer: {normalizationEnabled ? 'ON' : 'OFF'}
               </Text>
             </Pressable>
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Sleep Timer</Text>
+
+            <View style={styles.chipsWrap}>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>Active</Text>
+                <Text style={styles.metricValue}>{isSleepTimerActive ? 'YES' : 'NO'}</Text>
+              </View>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>Running</Text>
+                <Text style={styles.metricValue}>{isSleepTimerRunning ? 'YES' : 'NO'}</Text>
+              </View>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>Remaining</Text>
+                <Text style={styles.metricValue}>{formatTime(sleepTimerRemainingMs)}</Text>
+              </View>
+              <View style={styles.metricChip}>
+                <Text style={styles.metricLabel}>Total</Text>
+                <Text style={styles.metricValue}>{formatTime(sleepTimerTotalMs)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.progressTrack}>
+              <View style={styles.progressBackground} />
+              <View
+                style={[
+                  styles.progressFill,
+                  styles.sleepTimerProgressFill,
+                  {
+                    width: `${sleepTimerProgressPercent}%`,
+                  },
+                ]}
+              />
+            </View>
+
+            <View style={styles.rateWrap}>
+              {SLEEP_TIMER_PRESET_MINUTES.map((minutes) => (
+                <Pressable
+                  key={minutes}
+                  style={styles.rateButton}
+                  onPress={() => handleSetSleepTimer(minutes)}
+                >
+                  <Text style={styles.rateButtonText}>{minutes}m</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.controlsRow}>
+              <Pressable style={styles.controlButton} onPress={handleSubtractFromSleepTimer}>
+                <Text style={styles.controlButtonText}>-1m</Text>
+              </Pressable>
+              <Pressable style={styles.controlButton} onPress={handleAddToSleepTimer}>
+                <Text style={styles.controlButtonText}>+1m</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.controlButton, styles.controlButtonDanger]}
+                onPress={handleClearSleepTimer}
+              >
+                <Text style={styles.controlButtonText}>Clear</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.controlsRow}>
+              <Pressable style={styles.controlButtonPrimaryFull} onPress={handleGetSleepTimerSnapshot}>
+                <Text style={styles.controlButtonText}>Get Sleep Timer Snapshot</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.sleepSnapshotBox}>
+              <Text style={styles.sleepSnapshotText}>
+                Snapshot: {formatTime(sleepTimerSnapshot.remainingMs)} / {formatTime(sleepTimerSnapshot.totalMs)} | Active:{' '}
+                {sleepTimerSnapshot.isActive ? 'YES' : 'NO'} | Running: {sleepTimerSnapshot.isRunning ? 'YES' : 'NO'}
+              </Text>
+              <Text style={styles.sleepSnapshotText}>Snapshot Progress: {sleepTimerSnapshotPercent.toFixed(1)}%</Text>
+            </View>
+
+            <Text style={styles.panelSubtitle}>Progress Interval</Text>
+            <View style={styles.rateWrap}>
+              {SLEEP_TIMER_INTERVAL_PRESETS_MS.map((intervalMs) => {
+                const isActive = sleepTimerProgressIntervalMs === intervalMs;
+                return (
+                  <Pressable
+                    key={intervalMs}
+                    style={[styles.rateButton, isActive && styles.rateButtonActive]}
+                    onPress={() => handleSetSleepTimerInterval(intervalMs)}
+                  >
+                    <Text style={[styles.rateButtonText, isActive && styles.rateButtonTextActive]}>
+                      {intervalMs}ms
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.controlsRow}>
+              <Pressable style={styles.controlButtonPrimaryFull} onPress={handleGetSleepTimerInterval}>
+                <Text style={styles.controlButtonText}>Get Interval</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.sleepSnapshotBox}>
+              <Text style={styles.sleepSnapshotText}>Current Interval: {sleepTimerProgressIntervalMs}ms</Text>
+              <Text style={styles.sleepSnapshotText}>Ended Count: {sleepTimerEndedCount}</Text>
+              <Text style={styles.sleepSnapshotText}>Last Event: {lastSleepTimerEventLabel}</Text>
+            </View>
           </View>
 
           <View style={styles.panel}>
@@ -658,6 +865,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  controlButtonPrimaryFull: {
+    flexGrow: 1,
+    minWidth: 120,
+    backgroundColor: '#124D71',
+    borderColor: '#2D89BD',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
   toggleButton: {
     borderRadius: 8,
     borderWidth: 1,
@@ -733,6 +951,31 @@ const styles = StyleSheet.create({
   },
   rateButtonTextActive: {
     color: '#BAE6FD',
+  },
+  panelSubtitle: {
+    color: THEME.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  sleepTimerProgressFill: {
+    backgroundColor: THEME.success,
+  },
+  sleepSnapshotBox: {
+    backgroundColor: THEME.surfaceAlt,
+    borderColor: THEME.border,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  sleepSnapshotText: {
+    color: THEME.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   buttonDisabled: {
     opacity: 0.45,
